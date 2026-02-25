@@ -13,8 +13,24 @@ export async function POST(req: Request) {
     const envKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
     if (!envKey) return NextResponse.json({ error: "Thiếu Key .env" }, { status: 500 });
 
-    const cleanKey = envKey.trim().replace(/^'|'$/g, '');
-    const keyData = JSON.parse(cleanKey);
+    // --- ĐOẠN SỬA QUAN TRỌNG NHẤT ---
+    let keyData;
+    try {
+      const cleanKey = envKey.trim().replace(/^'|'$/g, '');
+      
+      // Kiểm tra nếu là JSON (bắt đầu bằng dấu {) thì parse luôn
+      // Nếu không thì giải mã Base64 rồi mới parse
+      if (cleanKey.startsWith('{')) {
+        keyData = JSON.parse(cleanKey);
+      } else {
+        const decodedKey = Buffer.from(cleanKey, 'base64').toString('utf-8');
+        keyData = JSON.parse(decodedKey);
+      }
+    } catch (e) {
+      console.error("❌ LỖI GIẢI MÃ KEY:", e);
+      return NextResponse.json({ error: "Định dạng Key không hợp lệ" }, { status: 500 });
+    }
+    // -------------------------------
 
     const auth = new google.auth.GoogleAuth({
       credentials: keyData,
@@ -22,14 +38,12 @@ export async function POST(req: Request) {
     });
 
     const calendar = google.calendar({ version: "v3", auth });
-
-    // Định dạng ngày cho sự kiện (Dạng YYYY-MM-DD)
     const formattedDate = new Date(deadline).toISOString().split("T")[0];
 
     const response = await calendar.events.insert({
       calendarId: "lytanloc10c1@gmail.com",
       requestBody: {
-        summary: `🚩 DEADLINE: ${name}`, // Tiêu đề hiện trên lịch
+        summary: `🚩 DEADLINE: ${name}`,
         description: `Dự án giao cho: ${manager_email}. Vui lòng hoàn thành đúng hạn.`,
         start: { date: formattedDate },
         end: { date: formattedDate },
@@ -42,7 +56,8 @@ export async function POST(req: Request) {
 
   } catch (err: unknown) {
     const error = err as GoogleApiError;
-    console.error("❌ LỖI GOOGLE API:", error.response?.data || error.message);
-    return NextResponse.json({ error: "Lỗi Server" }, { status: 500 });
+    // Log chi tiết để bạn xem trong Netlify Function Logs
+    console.error("❌ LỖI GOOGLE API CHI TIẾT:", JSON.stringify(error.response?.data) || error.message);
+    return NextResponse.json({ error: "Lỗi Server Google API" }, { status: 500 });
   }
 }
