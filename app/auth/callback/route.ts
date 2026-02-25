@@ -1,14 +1,20 @@
+import { createClient } from '@/utils/supabase/server'
 import { NextResponse } from 'next/server'
-import { createClient } from '@/utils/supabase/server' // Bạn cần tạo thêm file server.ts tương tự client.ts nhưng dùng createServerClient
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  // if "next" is in param, use it as the redirect URL
+  const next = searchParams.get('next') ?? '/'
 
   if (code) {
     const supabase = await createClient()
-    await supabase.auth.exchangeCodeForSession(code)
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    if (!error) {
+      return NextResponse.redirect(`${origin}${next}`)
+    }
   }
 
-  return NextResponse.redirect(`${origin}/dashboard`)
+  // Trả về lỗi nếu không đổi được code
+  return NextResponse.redirect(`${origin}/auth/auth-code-error`)
 }
